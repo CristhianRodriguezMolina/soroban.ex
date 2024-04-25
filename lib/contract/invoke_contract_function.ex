@@ -91,6 +91,7 @@ defmodule Soroban.Contract.InvokeContractFunction do
           source_public_key :: source_public_key(),
           function_name :: function_name(),
           function_args :: function_args(),
+          sponsored_public_key :: source_public_key() | nil,
           addl_resources :: addl_resources()
         ) :: envelope_xdr()
   def retrieve_unsigned_xdr_to_invoke(
@@ -100,6 +101,7 @@ defmodule Soroban.Contract.InvokeContractFunction do
         source_public_key,
         function_name,
         function_args,
+        sponsored_public_key \\ nil,
         addl_resources \\ []
       ) do
     with {:ok, seq_num} <- RPC.fetch_next_sequence_number(server, source_public_key),
@@ -111,7 +113,8 @@ defmodule Soroban.Contract.InvokeContractFunction do
              contract_address,
              function_name,
              function_args,
-             source_public_key
+             source_public_key,
+             sponsored_public_key
            ) do
       invoke_host_function_op
       |> RPCCalls.simulate(
@@ -119,6 +122,7 @@ defmodule Soroban.Contract.InvokeContractFunction do
         network_passphrase,
         source_account,
         sequence_number,
+        sponsored_public_key,
         addl_resources
       )
       |> RPCCalls.retrieve_unsigned_xdr(
@@ -126,7 +130,8 @@ defmodule Soroban.Contract.InvokeContractFunction do
         network_passphrase,
         source_account,
         sequence_number,
-        invoke_host_function_op
+        invoke_host_function_op,
+        sponsored_public_key
       )
     end
   end
@@ -175,9 +180,24 @@ defmodule Soroban.Contract.InvokeContractFunction do
           contract_address :: contract_address(),
           function_name :: function_name(),
           function_args :: function_args(),
-          source_public_key :: source_public_key()
+          source_public_key :: source_public_key(),
+          sponsored_public_key :: String.t() | nil
         ) :: invoke_host_function()
-  defp create_host_function_op(contract_address, function_name, function_args, source_public_key) do
+  defp create_host_function_op(
+         contract_address,
+         function_name,
+         function_args,
+         source_public_key,
+         sponsored_public_key \\ nil
+       )
+
+  defp create_host_function_op(
+         contract_address,
+         function_name,
+         function_args,
+         source_public_key,
+         sponsored_public_key
+       ) do
     function_args =
       InvokeContractArgs.new(
         contract_address: SCAddress.new(contract_address),
@@ -186,7 +206,11 @@ defmodule Soroban.Contract.InvokeContractFunction do
       )
 
     host_function = HostFunction.new(invoke_contract: function_args)
-    InvokeHostFunction.new(host_function: host_function, source_account: source_public_key)
+
+    InvokeHostFunction.new(
+      host_function: host_function,
+      source_account: sponsored_public_key || source_public_key
+    )
   end
 
   @spec convert_to_sc_val(function_args :: function_args()) :: {:ok, sc_val_list()}

@@ -18,6 +18,8 @@ defmodule Soroban.Contract.RPCCalls do
   alias Stellar.TxBuild.{
     Account,
     BaseFee,
+    BeginSponsoringFutureReserves,
+    EndSponsoringFutureReserves,
     InvokeHostFunction,
     SequenceNumber,
     Signature,
@@ -46,6 +48,7 @@ defmodule Soroban.Contract.RPCCalls do
           network_passphrase :: network_passphrase(),
           source_account :: account(),
           sequence_number :: sequence_number(),
+          sponsored_public_key :: String.t() | nil,
           addl_resources :: addl_resources(),
           soroban_data :: soroban_data()
         ) :: simulate_response()
@@ -55,6 +58,7 @@ defmodule Soroban.Contract.RPCCalls do
         _network_passphrase,
         _source_account,
         _sequence_number,
+        _sponsored_public_key,
         _addl_resources,
         soroban_data \\ nil
       )
@@ -65,6 +69,7 @@ defmodule Soroban.Contract.RPCCalls do
         network_passphrase,
         source_account,
         sequence_number,
+        sponsored_public_key,
         addl_resources,
         nil
       ) do
@@ -73,7 +78,7 @@ defmodule Soroban.Contract.RPCCalls do
       |> TxBuild.new()
       |> TxBuild.set_network_passphrase(network_passphrase)
       |> TxBuild.set_sequence_number(sequence_number)
-      |> TxBuild.add_operation(operation)
+      |> handle_add_operation(operation, sponsored_public_key)
       |> TxBuild.envelope()
 
     RPC.simulate_transaction(server, transaction: envelope_xdr, addl_resources: addl_resources)
@@ -85,6 +90,7 @@ defmodule Soroban.Contract.RPCCalls do
         network_passphrase,
         source_account,
         sequence_number,
+        sponsored_public_key,
         addl_resources,
         soroban_data
       ) do
@@ -95,7 +101,7 @@ defmodule Soroban.Contract.RPCCalls do
       |> TxBuild.new()
       |> TxBuild.set_network_passphrase(network_passphrase)
       |> TxBuild.set_sequence_number(sequence_number)
-      |> TxBuild.add_operation(operation)
+      |> handle_add_operation(operation, sponsored_public_key)
       |> TxBuild.set_soroban_data(soroban_data)
       |> TxBuild.envelope()
 
@@ -110,6 +116,7 @@ defmodule Soroban.Contract.RPCCalls do
           sequence_number :: sequence_number(),
           signature :: signature(),
           operation :: operation(),
+          sponsored_public_key :: String.t() | nil,
           auth_secret_key :: auth_secret_key()
         ) :: send_response() | simulate_response()
   def send_transaction(
@@ -120,6 +127,7 @@ defmodule Soroban.Contract.RPCCalls do
         _sequence_number,
         _signature,
         _invoke_host_function_op,
+        _sponsored_public_key,
         auth_secret_key \\ nil
       )
 
@@ -136,6 +144,7 @@ defmodule Soroban.Contract.RPCCalls do
         sequence_number,
         signature,
         %InvokeHostFunction{} = operation,
+        sponsored_public_key,
         auth_secret_keys
       ) do
     with %InvokeHostFunction{} = invoke_host_function_op <-
@@ -148,7 +157,7 @@ defmodule Soroban.Contract.RPCCalls do
         |> TxBuild.new()
         |> TxBuild.set_network_passphrase(network_passphrase)
         |> TxBuild.set_sequence_number(sequence_number)
-        |> TxBuild.add_operation(invoke_host_function_op)
+        |> handle_add_operation(invoke_host_function_op, sponsored_public_key)
         |> TxBuild.set_base_fee(fee)
         |> TxBuild.set_soroban_data(transaction_data)
         |> TxBuild.sign(signature)
@@ -171,6 +180,7 @@ defmodule Soroban.Contract.RPCCalls do
         sequence_number,
         signature,
         operation,
+        sponsored_public_key,
         _auth_secret_keys
       )
       when is_nil(results) and is_binary(transaction_data) do
@@ -183,7 +193,7 @@ defmodule Soroban.Contract.RPCCalls do
         |> TxBuild.new()
         |> TxBuild.set_network_passphrase(network_passphrase)
         |> TxBuild.set_sequence_number(sequence_number)
-        |> TxBuild.add_operation(operation)
+        |> handle_add_operation(operation, sponsored_public_key)
         |> TxBuild.set_base_fee(fee)
         |> TxBuild.set_soroban_data(transaction_data)
         |> TxBuild.sign(signature)
@@ -201,6 +211,7 @@ defmodule Soroban.Contract.RPCCalls do
         _sequence_number,
         _signature,
         _invoke_host_function_op,
+        _sponsored_public_key,
         _auth_secret_key
       ),
       do: response
@@ -211,7 +222,8 @@ defmodule Soroban.Contract.RPCCalls do
           network_passphrase :: network_passphrase(),
           source_account :: account(),
           sequence_number :: sequence_number(),
-          invoke_host_function_op :: operation()
+          invoke_host_function_op :: operation(),
+          sponsored_public_key :: String.t() | nil
         ) :: envelope_xdr() | simulate_response()
   def retrieve_unsigned_xdr(
         _simulate_response,
@@ -219,7 +231,8 @@ defmodule Soroban.Contract.RPCCalls do
         _network_passphrase,
         _source_account,
         _sequence_number,
-        _invoke_host_function_op
+        _invoke_host_function_op,
+        _sponsored_public_key
       )
 
   def retrieve_unsigned_xdr(
@@ -233,7 +246,8 @@ defmodule Soroban.Contract.RPCCalls do
         network_passphrase,
         source_account,
         sequence_number,
-        invoke_host_function_op
+        invoke_host_function_op,
+        sponsored_public_key
       ) do
     invoke_host_function_op =
       set_host_function_auth(server, network_passphrase, invoke_host_function_op, auth, [])
@@ -246,7 +260,7 @@ defmodule Soroban.Contract.RPCCalls do
       |> TxBuild.new()
       |> TxBuild.set_network_passphrase(network_passphrase)
       |> TxBuild.set_sequence_number(sequence_number)
-      |> TxBuild.add_operation(invoke_host_function_op)
+      |> handle_add_operation(invoke_host_function_op, sponsored_public_key)
       |> TxBuild.set_base_fee(fee)
       |> TxBuild.set_soroban_data(transaction_data)
       |> TxBuild.envelope()
@@ -260,7 +274,8 @@ defmodule Soroban.Contract.RPCCalls do
         _network_passphrase,
         _source_account,
         _sequence_number,
-        _invoke_host_function_op
+        _invoke_host_function_op,
+        _sponsored_public_key
       ),
       do: response
 
@@ -335,4 +350,18 @@ defmodule Soroban.Contract.RPCCalls do
   @spec validate_operation(operation :: footprint_operations()) :: validation()
   defp validate_operation(%ExtendFootprintTTL{} = operation), do: {:ok, operation}
   defp validate_operation(%RestoreFootprint{} = operation), do: {:ok, operation}
+
+  defp handle_add_operation(tx_build, operation, nil),
+    do: TxBuild.add_operation(tx_build, operation)
+
+  defp handle_add_operation(tx_build, operation, sponsored_public_key) do
+    tx_build
+    |> TxBuild.add_operation(
+      BeginSponsoringFutureReserves.new(sponsored_id: sponsored_public_key)
+    )
+    |> TxBuild.add_operation(operation)
+    |> TxBuild.add_operation(
+      EndSponsoringFutureReserves.new(source_account: sponsored_public_key)
+    )
+  end
 end

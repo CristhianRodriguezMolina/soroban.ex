@@ -140,6 +140,7 @@ defmodule Soroban.Contract do
                 source_public_key,
                 function_name,
                 function_args \\ [],
+                sponsored_public_key \\ nil,
                 addl_resources \\ []
               ),
               to: InvokeContractFunction,
